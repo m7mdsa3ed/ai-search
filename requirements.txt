@@ -1,0 +1,7 @@
+fastapi
+uvicorn[standard]
+qdrant-client
+torch
+transformers
+python-multipart
+python-dotenv
