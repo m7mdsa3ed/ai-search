@@ -2,12 +2,12 @@ from fastapi import FastAPI, UploadFile, File
 from pydantic import BaseModel
 from typing import List, Optional
 from qdrant_client import QdrantClient
-from qdrant_client.http.models import Distance, VectorParams, PointStruct
-from qdrant_client.http.models import ScoredPoint
+from qdrant_client.http.models import ScoredPoint, Distance, VectorParams, PointStruct, Filter, FieldCondition, MatchValue, Range
 from transformers import AutoTokenizer, AutoModel
 import torch
 import os
 from dotenv import load_dotenv
+from typing import Any
 
 # Initialize FastAPI
 app = FastAPI(title="Embedding Service with Qwen3 + Qdrant")
@@ -54,11 +54,21 @@ class BulkInsertRequest(BaseModel):
 class LoadUsersRequest(BaseModel):
     source_file: Optional[str] = None  # Optional: if not using file upload
 
+class MetadataFilter(BaseModel):
+    field: str
+    value: Optional[Any] = None   # Any JSON value
+    gte: Optional[float] = None
+    lte: Optional[float] = None
+
+class CollectionSearch(BaseModel):
+    name: str
+    filters: Optional[List[MetadataFilter]] = None
+
 class SearchRequest(BaseModel):
-    query: str
+    query: Optional[str] = None   # optional: can do pure filter search
     top_k: int = 5
     score_threshold: Optional[float] = None
-    collections: List[str]
+    collections: List[CollectionSearch]
 
 # --------- Helper Functions ---------
 def embed_text(text: str):
@@ -101,21 +111,36 @@ def bulk_insert(req: BulkInsertRequest):
 @app.post("/search")
 def search(req: SearchRequest):
     results_by_collection: dict[str, List[ScoredPoint]] = {}
-    
-    query_vec = embed_text(req.query)
 
-    for collection_name in req.collections:
+    query_vec = embed_text(req.query) if req.query else None
+
+    for col in req.collections:
+        qdrant_filter = None
+        if col.filters:
+            conditions = []
+            for f in col.filters:
+                if f.value is not None:
+                    conditions.append(FieldCondition(
+                        key=f.field,
+                        match=MatchValue(value=f.value)
+                    ))
+                if f.gte is not None or f.lte is not None:
+                    conditions.append(FieldCondition(
+                        key=f.field,
+                        range=Range(gte=f.gte, lte=f.lte)
+                    ))
+            qdrant_filter = Filter(must=conditions)
+
         try:
-            # Do not automatically create collection for search - return empty if missing
             results = qdrant.search(
-                collection_name=collection_name,
+                collection_name=col.name,
                 query_vector=query_vec,
-                limit=req.top_k, # Fetch top_k from each collection
-                score_threshold=req.score_threshold
+                limit=req.top_k,
+                score_threshold=req.score_threshold,
+                query_filter=qdrant_filter
             )
-            results_by_collection[collection_name] = results
+            results_by_collection[col.name] = results
         except Exception:
-            # If an error occurs (e.g., collection not found), assign an empty list
-            results_by_collection[collection_name] = []
+            results_by_collection[col.name] = []
 
     return {"results": results_by_collection}
