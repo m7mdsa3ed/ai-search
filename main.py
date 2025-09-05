@@ -18,10 +18,11 @@ load_dotenv()
 # Configuration via environment with sensible defaults
 MODEL_NAME = os.getenv("MODEL_NAME", "ibm-granite/granite-embedding-278m-multilingual")
 QDRANT_URL = os.getenv("QDRANT_URL", "http://localhost:6333")
+HUGGINGFACE_HUB_TOKEN = os.getenv("HUGGINGFACE_HUB_TOKEN", "")
 
 # Load embedding model
-tokenizer = AutoTokenizer.from_pretrained(MODEL_NAME)
-model = AutoModel.from_pretrained(MODEL_NAME)
+tokenizer = AutoTokenizer.from_pretrained(MODEL_NAME, token=HUGGINGFACE_HUB_TOKEN)
+model = AutoModel.from_pretrained(MODEL_NAME, token=HUGGINGFACE_HUB_TOKEN)
 
 # Connect to Qdrant
 qdrant = QdrantClient(url=QDRANT_URL)
