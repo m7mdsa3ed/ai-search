@@ -3,8 +3,7 @@ from pydantic import BaseModel
 from typing import List, Optional
 from qdrant_client import QdrantClient
 from qdrant_client.http.models import ScoredPoint, Distance, VectorParams, PointStruct, Filter, FieldCondition, MatchValue, Range
-from transformers import AutoTokenizer, AutoModel
-import torch
+from sentence_transformers import SentenceTransformer
 import os
 from dotenv import load_dotenv
 from typing import Any
@@ -21,8 +20,7 @@ QDRANT_URL = os.getenv("QDRANT_URL", "http://localhost:6333")
 HUGGINGFACE_HUB_TOKEN = os.getenv("HUGGINGFACE_HUB_TOKEN", "")
 
 # Load embedding model
-tokenizer = AutoTokenizer.from_pretrained(MODEL_NAME, token=HUGGINGFACE_HUB_TOKEN)
-model = AutoModel.from_pretrained(MODEL_NAME, token=HUGGINGFACE_HUB_TOKEN)
+model = SentenceTransformer(MODEL_NAME, use_auth_token=HUGGINGFACE_HUB_TOKEN if HUGGINGFACE_HUB_TOKEN else None)
 
 # Connect to Qdrant
 qdrant = QdrantClient(url=QDRANT_URL)
@@ -32,7 +30,7 @@ def ensure_collection(name: str):
     try:
         qdrant.create_collection(
             collection_name=name,
-            vectors_config=VectorParams(size=model.config.hidden_size, distance=Distance.COSINE),
+            vectors_config=VectorParams(size=model.get_sentence_embedding_dimension(), distance=Distance.COSINE),
         )
     except Exception:
         # If collection already exists or any other non-fatal error, ignore.
@@ -73,11 +71,9 @@ class SearchRequest(BaseModel):
 
 # --------- Helper Functions ---------
 def embed_text(text: str):
-    tokens = tokenizer(text, return_tensors="pt", truncation=True, padding=True)
-    with torch.no_grad():
-        outputs = model(**tokens)
-        embeddings = outputs.last_hidden_state.mean(dim=1)  # Mean pooling
-    return embeddings[0].cpu().numpy()
+    # SentenceTransformer handles tokenization and embedding generation
+    embeddings = model.encode(text)
+    return embeddings
 
 # --------- API Routes ---------
 @app.post("/insert")

@@ -2,6 +2,6 @@ fastapi
 uvicorn[standard]
 qdrant-client
 torch
-transformers
+sentence-transformers
 python-multipart
 python-dotenv
