@@ -88,6 +88,9 @@ class SearchRequest(BaseModel):
     score_threshold: Optional[float] = None
     collections: List[CollectionSearch]
 
+class DeleteCollectionRequest(BaseModel):
+    collection: str
+
 # --------- Helper Functions ---------
 def embed_text(text: str):
     # SentenceTransformer handles tokenization and embedding generation
@@ -160,3 +163,20 @@ def search(req: SearchRequest):
             results_by_collection[col.name] = []
 
     return {"results": results_by_collection}
+
+@app.delete("/collection")
+def delete_collection(req: DeleteCollectionRequest):
+    """
+    Delete a collection and all its records from the vector database.
+
+    Args:
+        req: DeleteCollectionRequest containing the collection name to delete
+
+    Returns:
+        Status message indicating success or failure
+    """
+    try:
+        qdrant.delete_collection(collection_name=req.collection)
+        return {"status": "deleted", "collection": req.collection}
+    except Exception as e:
+        return {"status": "error", "message": str(e), "collection": req.collection}
