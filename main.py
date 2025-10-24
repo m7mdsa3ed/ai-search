@@ -1,4 +1,5 @@
 from fastapi import FastAPI, UploadFile, File
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import List, Optional
 from qdrant_client import QdrantClient
@@ -7,9 +8,19 @@ from sentence_transformers import SentenceTransformer
 import os
 from dotenv import load_dotenv
 from typing import Any
+import torch
 
 # Initialize FastAPI
-app = FastAPI(title="Embedding Service with Qwen3 + Qdrant")
+app = FastAPI(title="Embedding Service")
+
+# Add CORS middleware to allow all origins
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # Allows all origins
+    allow_credentials=True,
+    allow_methods=["*"],  # Allows all methods
+    allow_headers=["*"],  # Allows all headers
+)
 
 # Load environment variables from .env (if present)
 load_dotenv()
@@ -19,8 +30,16 @@ MODEL_NAME = os.getenv("MODEL_NAME", "ibm-granite/granite-embedding-278m-multili
 QDRANT_URL = os.getenv("QDRANT_URL", "http://localhost:6333")
 HUGGINGFACE_HUB_TOKEN = os.getenv("HUGGINGFACE_HUB_TOKEN", "")
 
+# --- GPU/CPU Device Setup ---
+device = "cuda" if torch.cuda.is_available() else "cpu"
+print(f"Using device: {device}")
+
 # Load embedding model
-model = SentenceTransformer(MODEL_NAME, use_auth_token=HUGGINGFACE_HUB_TOKEN if HUGGINGFACE_HUB_TOKEN else None)
+model = SentenceTransformer(
+    MODEL_NAME,
+    use_auth_token=HUGGINGFACE_HUB_TOKEN if HUGGINGFACE_HUB_TOKEN else None,
+    device=device
+)
 
 # Connect to Qdrant
 qdrant = QdrantClient(url=QDRANT_URL)
@@ -72,7 +91,7 @@ class SearchRequest(BaseModel):
 # --------- Helper Functions ---------
 def embed_text(text: str):
     # SentenceTransformer handles tokenization and embedding generation
-    embeddings = model.encode(text)
+    embeddings = model.encode(text, device=device)
     return embeddings
 
 # --------- API Routes ---------
